@@ -48,12 +48,7 @@ class Assignment < ApplicationRecord
   DEFAULT_MAX_OUTSTANDING_REVIEWS = 2
 
   def user_on_team?(user)
-    teams = self.teams
-    users = []
-    teams.each do |team|
-      users << team.users
-    end
-    users.flatten.include? user
+    teams.flat_map(&:users).include?(user) #refactored
   end
 
   def self.max_outstanding_reviews
@@ -63,7 +58,7 @@ class Assignment < ApplicationRecord
   def team_assignment?
     max_team_size > 0
   end
-  alias team_assignment team_assignment?
+#removed redudant alias
 
   def topics?
     @has_topics ||= sign_up_topics.any?
@@ -78,19 +73,13 @@ class Assignment < ApplicationRecord
   end
 
   # removes an assignment from course
-  def remove_assignment_from_course
-    oldpath = begin
-                path
-              rescue StandardError
-                nil
-              end
+  def remove_assignment_from_course #refactored
+    oldpath = path rescue nil
     self.course_id = nil
     save
-    newpath = begin
-                path
-              rescue StandardError
-                nil
-              end
+    newpath = path rescue nil
+    return unless oldpath && newpath
+  
     FileHelper.update_file_location(oldpath, newpath)
   end
 
@@ -198,24 +187,28 @@ class Assignment < ApplicationRecord
     right && (right.name == 'OK' || right.name == 'Late')
   end
 
+  #Check if permission is allowed  
+  def permission_allowed?(permission_type, topic_id = nil) #Extract Common Logic for Permissions
+    check_condition(permission_type, topic_id)
+  end
   # Determine if the next due date from now allows for submissions
   def submission_allowed(topic_id = nil)
-    check_condition('submission_allowed_id', topic_id)
+    permission_allowed?('submission_allowed_id', topic_id)
   end
 
   # Determine if the next due date from now allows to take the quizzes
   def quiz_allowed(topic_id = nil)
-    check_condition('quiz_allowed_id', topic_id)
+    permission_allowed?('quiz_allowed_id', topic_id)
   end
 
   # Determine if the next due date from now allows for reviews
   def can_review(topic_id = nil)
-    check_condition('review_allowed_id', topic_id)
+    permission_allowed?('review_allowed_id', topic_id)
   end
 
   # Determine if the next due date from now allows for metareviews
   def metareview_allowed(topic_id = nil)
-    check_condition('review_of_review_allowed_id', topic_id)
+    permission_allowed?('review_of_review_allowed_id', topic_id)
   end
 
   # Deletes all instances created as part of assignment and finally destroys itself.
@@ -658,13 +651,10 @@ class Assignment < ApplicationRecord
   #Method to drop all the SignedUpRecords of all topics for that assignment once the drop_topic deadline passes
   def drop_waitlisted_teams
     # Find all the topics (sign_up_topics) under the current assignment (self).
-    topics = SignUpTopic.where(assignment_id: self.id)
-  
-    # Iterate through each topic to find and drop waitlisted teams.
-    topics.each do |topic|
-      signed_up_teams = SignedUpTeam.where(topic_id: topic.id, is_waitlisted: true)
-      # Remove all of the waitlisted SignedUpTeam entries for this topic.
-      signed_up_teams.destroy_all
+    # Iterate through each topic to find and drop waitlisted teams.      
+    # Remove all of the waitlisted SignedUpTeam entries for this topic.
+    SignUpTopic.where(assignment_id: id).each do |topic|
+      SignedUpTeam.where(topic_id: topic.id, is_waitlisted: true).destroy_all #Simplified and refactored
     end
   end
 
