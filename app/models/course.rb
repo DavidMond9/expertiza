@@ -33,20 +33,19 @@ class Course < ApplicationRecord
   def get_participant(user_id)
     CourseParticipant.where(parent_id: id, user_id: user_id)
   end
-
+  
+  #Problem: The add_participant method has nested conditionals that can be simplified.
+  #Solution: Use guard clauses to reduce nesting and improve readability.
   def add_participant(user_name)
     user = User.find_by(name: user_name)
-    if user.nil?
-      raise 'No user account exists with the name ' + user_name + ". Please <a href='" + url_for(controller: 'users', action: 'new') + "'>create</a> the user first."
-    end
-
-    participant = CourseParticipant.where(parent_id: id, user_id: user.id).first
-    if participant # If there is already a participant, raise an error. Otherwise, create it
-      raise "The user #{user.name} is already a participant."
-    else
-      CourseParticipant.create(parent_id: id, user_id: user.id, permission_granted: user.master_permission_granted)
-    end
+    raise "No user account exists with the name #{user_name}. Please <a href='#{url_for(controller: 'users', action: 'new')}'>create</a> the user first." if user.nil?
+  
+    participant = CourseParticipant.find_by(parent_id: id, user_id: user.id)
+    raise "The user #{user.name} is already a participant." if participant
+  
+    CourseParticipant.create(parent_id: id, user_id: user.id, permission_granted: user.master_permission_granted)
   end
+  
 
   def copy_participants(assignment_id)
     participants = AssignmentParticipant.where(parent_id: assignment_id)
@@ -69,13 +68,10 @@ class Course < ApplicationRecord
     end
   end
 
+  #Problem: The user_on_team? method manually flattens the array, which can be simplified.
+  #Solution: Use flat_map for concise code.
   def user_on_team?(user)
-    teams = get_teams
-    users = []
-    teams.each do |team|
-      users << team.users
-    end
-    users.flatten.include? user
+    get_teams.flat_map(&:users).include?(user)
   end
 
   require 'analytic/course_analytic'
